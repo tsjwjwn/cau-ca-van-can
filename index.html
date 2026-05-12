@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fishing Immortal - Câu Cá Vạn Cân</title>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #game-container { border: 2px solid #333; box-shadow: 0 0 20px rgba(0,255,255,0.2); }
+        .ui-hint { position: absolute; bottom: 10px; color: white; pointer-events: none; text-align: center; width: 100%; text-shadow: 2px 2px #000; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div class="ui-hint">Phím 1: Thái Cực Quyền | Phím 2: Thục Đạo Sơn | Click: Kéo cá</div>
+
+<script>
+const config = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 700,
+    parent: 'game-container',
+    backgroundColor: '#0a2d4d',
+    scene: { preload: preload, create: create, update: update }
+};
+
+const game = new Phaser.Game(config);
+let fish, line, hook, progress = 0;
+let isFishing = false;
+let fishHealth = 100;
+let skillActive = false;
+
+function preload() {
+    // Tạo asset giả lập bằng đồ họa vector của Phaser
+}
+
+function create() {
+    const scene = this;
+
+    // 1. Vẽ mặt nước & Background
+    let graphics = this.add.graphics();
+    graphics.fillGradientStyle(0x0a2d4d, 0x0a2d4d, 0x001a33, 0x001a33, 1);
+    graphics.fillRect(0, 0, 400, 700);
+
+    // 2. Thông tin cá
+    this.fishName = this.add.text(200, 50, "CÁ VẠN CÂN", { fontSize: '24px', fill: '#fff', fontWeight: 'bold' }).setOrigin(0.5);
+    this.hpBarBg = this.add.rectangle(200, 80, 200, 10, 0x333333);
+    this.hpBar = this.add.rectangle(200, 80, 200, 10, 0xff0000);
+
+    // 3. Nhân vật/Cần câu (đơn giản hóa bằng khối)
+    hook = this.add.circle(200, 400, 10, 0xffcc00);
+    line = this.add.graphics();
+
+    // 4. Hiệu ứng Hạt (Particles) - Cực kỳ quan trọng để "mãn nhãn"
+    this.particles = this.add.particles(0, 0, 'flare', {
+        speed: { min: 50, max: 150 },
+        scale: { start: 0.1, end: 0 },
+        blendMode: 'ADD',
+        emitting: false
+    });
+
+    // 5. Logic Kỹ năng
+    this.input.keyboard.on('keydown-ONE', () => useTaiChi(scene));
+    this.input.keyboard.on('keydown-TWO', () => useShuDaoSon(scene));
+    this.input.on('pointerdown', () => pullFish(scene));
+
+    resetFish(this);
+}
+
+function update() {
+    // Vẽ dây câu
+    line.clear();
+    line.lineStyle(2, 0xffffff, 0.5);
+    line.lineBetween(200, 0, hook.x, hook.y);
+
+    if (isFishing) {
+        // Cá vùng vẫy
+        hook.x += Math.sin(this.time.now / 100) * 2;
+        hook.y += Math.cos(this.time.now / 150) * 1;
+        
+        // Máu cá tự hồi nhẹ
+        if (fishHealth < 100 && !skillActive) fishHealth += 0.05;
+        updateHP();
+    }
+}
+
+// --- CHIÊU THỨC 1: THÁI CỰC QUYỀN ---
+function useTaiChi(scene) {
+    if (skillActive) return;
+    skillActive = true;
+    
+    // Hiệu ứng Bát Quái
+    let bagua = scene.add.circle(200, 400, 1, 0xffffff, 0.1).setStrokeStyle(2, 0x00ffff);
+    scene.tweens.add({
+        targets: bagua,
+        radius: 150,
+        alpha: 0,
+        duration: 1000,
+        onComplete: () => bagua.destroy()
+    });
+
+    // Hiệu ứng làm chậm cá
+    scene.add.text(200, 300, "THÁI CỰC QUYỀN", { fontSize: '32px', fontStyle: 'italic', fill: '#00ffff' }).setOrigin(0.5);
+    
+    // Trong 4 giây, cá không thể hồi máu và bị giữ chân
+    scene.time.delayedCall(4000, () => { skillActive = false; });
+}
+
+// --- CHIÊU THỨC 2: THỤC ĐẠO SƠN ---
+function useShuDaoSon(scene) {
+    if (skillActive) return;
+    skillActive = true;
+
+    // Hiệu ứng Kiếm khí khổng lồ
+    let sword = scene.add.rectangle(200, -100, 20, 300, 0xffffff);
+    scene.tweens.add({
+        targets: sword,
+        y: 400,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => {
+            sword.destroy();
+            scene.cameras.main.shake(300, 0.02); // Rung màn hình
+            fishHealth -= 30; // Sát thương cực lớn
+            updateHP();
+            checkWin(scene);
+            skillActive = false;
+        }
+    });
+
+    scene.add.text(200, 200, "THỤC ĐẠO SƠN", { fontSize: '32px', fontWeight: 'bold', fill: '#ffcc00' }).setOrigin(0.5);
+}
+
+function pullFish(scene) {
+    if (fishHealth > 0) {
+        fishHealth -= 2;
+        // Hiệu ứng tóe nước khi bấm
+        const p = scene.add.circle(hook.x, hook.y, 5, 0xffffff);
+        scene.tweens.add({ targets: p, scale: 3, alpha: 0, duration: 200, onComplete: () => p.destroy() });
+        
+        updateHP();
+        checkWin(scene);
+    }
+}
+
+function updateHP() {
+    fishHealth = Math.max(0, fishHealth);
+    game.scene.scenes[0].hpBar.width = (fishHealth / 100) * 200;
+}
+
+function checkWin(scene) {
+    if (fishHealth <= 0) {
+        isFishing = false;
+        scene.add.text(200, 350, "BẮT ĐƯỢC CÁ VẠN CÂN!", { fontSize: '28px', fill: '#0f0' }).setOrigin(0.5);
+        scene.time.delayedCall(2000, () => {
+            fishHealth = 100;
+            scene.scene.restart();
+        });
+    }
+}
+
+function resetFish(scene) {
+    isFishing = true;
+    fishHealth = 100;
+}
+</script>
+</body>
+</html>
